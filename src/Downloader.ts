@@ -73,6 +73,47 @@ interface BackoffOptions {
 interface CompressionData {
   data: any
 }
+// We consider an error to be a malformed JSON response error 
+// if it is either a SyntaxError, or an AxiosError with ERR_BAD_RESPONSE code 
+// and a message indicating JSON parsing issue, or an AxiosError 
+// with ERR_BAD_RESPONSE code and a cause 
+// which is a SyntaxError 
+// (to cope with the fact that axios wraps JSON parse errors 
+// in a cause which makes it impossible to detect them without looking at the message)
+
+function isMalformedJsonResponseError(err: unknown): boolean {
+  if (err instanceof SyntaxError) {
+    return true
+  }
+
+  if (!axios.isAxiosError(err) || err.code !== AxiosError.ERR_BAD_RESPONSE) {
+    return false
+  }
+
+  if (err.cause instanceof SyntaxError) {
+    return true
+  }
+
+  const message = [err.message, err.cause?.message].filter((item): item is string => typeof item === 'string').join(' ')
+  return /\bjson\b/i.test(message)
+}
+
+function isMalformedJsonResponseError(err: unknown): boolean {
+  if (err instanceof SyntaxError) {
+    return true
+  }
+
+  if (!axios.isAxiosError(err) || err.code !== AxiosError.ERR_BAD_RESPONSE) {
+    return false
+  }
+
+  if (err.cause instanceof SyntaxError) {
+    return true
+  }
+
+  const message = [err.message, err.cause?.message].filter((item): item is string => typeof item === 'string').join(' ')
+  return /\bjson\b/i.test(message)
+}
 
 export class DownloadError extends Error {
   urlCalled: string | null
@@ -183,6 +224,11 @@ class Downloader {
       failAfter: 10,
       retryIf: (err: any) => {
         const requestedUrl = err.urlCalled || err.config?.url || 'unknown'
+        if (isMalformedJsonResponseError(err)) {
+          logger.log(`Retrying ${requestedUrl} due to malformed JSON response`)
+          return true
+        }
+
         if (err instanceof AxiosError && err.code && !['ERR_BAD_REQUEST', 'ERR_BAD_RESPONSE'].includes(err.code)) {
           logger.log(`Retrying ${requestedUrl} URL due to ${err.code} error`)
           return true // retry all connection issues
@@ -251,6 +297,11 @@ class Downloader {
         'accept-encoding': 'gzip, deflate',
       },
       responseType: 'json',
+      transitional: {
+        // Parse failures must throw so backoff retries can be triggered.
+        silentJSONParsing: false,
+        forcedJSONParsing: true,
+      },
       method: 'GET',
     }
 
@@ -656,7 +707,12 @@ class Downloader {
           handler(null, val.data)
         }
       })
-      .catch((err) => handler(err))
+      .catch((err) => {
+        if (isMalformedJsonResponseError(err)) {
+          logger.warn(`Malformed JSON from [${url}] → ${err.message}`)
+        }
+        handler(err)
+      })
   }
 
   private async getImageMimeType(data: any): Promise<string | null> {
