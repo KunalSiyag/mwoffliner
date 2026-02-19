@@ -1,5 +1,7 @@
 Unreleased:
+* FIX: Support third-party hosted (Youtube) videos (@kunalsiyag #2481)
 * CHANGED: Keep only ActionParse renderer (@benoit74 #2210)
+
 
 1.17.5:
 * NEW: Add validation for internationalization (i18n) files (@ShreyashSri #2563)
