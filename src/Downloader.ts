@@ -73,13 +73,6 @@ interface BackoffOptions {
 interface CompressionData {
   data: any
 }
-// We consider an error to be a malformed JSON response error 
-// if it is either a SyntaxError, or an AxiosError with ERR_BAD_RESPONSE code 
-// and a message indicating JSON parsing issue, or an AxiosError 
-// with ERR_BAD_RESPONSE code and a cause 
-// which is a SyntaxError 
-// (to cope with the fact that axios wraps JSON parse errors 
-// in a cause which makes it impossible to detect them without looking at the message)
 
 function isMalformedJsonResponseError(err: unknown): boolean {
   if (err instanceof SyntaxError) {
@@ -90,29 +83,7 @@ function isMalformedJsonResponseError(err: unknown): boolean {
     return false
   }
 
-  if (err.cause instanceof SyntaxError) {
-    return true
-  }
-
-  const message = [err.message, err.cause?.message].filter((item): item is string => typeof item === 'string').join(' ')
-  return /\bjson\b/i.test(message)
-}
-
-function isMalformedJsonResponseError(err: unknown): boolean {
-  if (err instanceof SyntaxError) {
-    return true
-  }
-
-  if (!axios.isAxiosError(err) || err.code !== AxiosError.ERR_BAD_RESPONSE) {
-    return false
-  }
-
-  if (err.cause instanceof SyntaxError) {
-    return true
-  }
-
-  const message = [err.message, err.cause?.message].filter((item): item is string => typeof item === 'string').join(' ')
-  return /\bjson\b/i.test(message)
+  return err.cause instanceof SyntaxError
 }
 
 export class DownloadError extends Error {
